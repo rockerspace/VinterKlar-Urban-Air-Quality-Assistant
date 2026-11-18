@@ -6,6 +6,7 @@ import type {
   PlaybookCategory,
 } from '../types';
 import { CALCULATOR_INTERVENTIONS } from '../data/cleanAirData';
+import { EmissionChart } from './EmissionChart';
 
 interface ImpactCalculatorProps {
   baseline: ImpactBaselineInputs;
@@ -498,6 +499,9 @@ export function ImpactCalculator({
               direct winter PM2.5 emissions across the season.
             </p>
           </div>
+
+          {/* 7-Day Recharts Trajectory Visualization */}
+          <EmissionChart impact={impact} cityName={cityName} />
         </div>
       </div>
     </section>
