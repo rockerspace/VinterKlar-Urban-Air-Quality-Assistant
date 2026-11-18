@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, Check, Printer, Users } from 'lucide-react';
+import { Copy, Check, Printer, Users, Download } from 'lucide-react';
 import type { ImpactCalculationResult, LocalAirBrief } from '../types';
 
 interface CommunitySectionProps {
@@ -81,11 +81,55 @@ export function CommunitySection({
           </button>
           <button
             type="button"
+            onClick={() => {
+              const summaryText = [
+                `VinterKlar Clean-Air Action Plan — ${airBrief.city}`,
+                `Generated: ${new Date().toLocaleDateString()}`,
+                `Local Advisory: AQI ${airBrief.estimatedAqi} (${airBrief.severityLevel}) · Peak Inversion: ${airBrief.inversionWindow}`,
+                `Best Afternoon Ventilation Window: ${airBrief.bestVentilationWindow}`,
+                ``,
+                `--------------------------------------------------`,
+                `OUR HOUSEHOLD COMMITMENT (${activeInterventionsCount} active interventions):`,
+                `--------------------------------------------------`,
+                `- Baseline Indoor PM2.5: ${impact.baselineIndoorPm25} ug/m3`,
+                `- Mitigated Indoor PM2.5: ${impact.mitigatedIndoorPm25} ug/m3 (-${impact.indoorDropPct}% reduction)`,
+                `- Daily Inhaled Dose: ${impact.mitigatedDailyInhaledUg} ug/day (down from ${impact.baselineDailyInhaledUg} ug)`,
+                `- Weekly PM2.5 Avoided: ${impact.weeklyPm25AvoidedGrams} g`,
+                `- Weekly Smog NOx Avoided: ${impact.weeklyNoxAvoidedGrams} g`,
+                `- Weekly Carbon Avoided: ${impact.weeklyCo2AvoidedKg} kg CO2e`,
+                ``,
+                `--------------------------------------------------`,
+                `COMMUNITY MULTIPLIER (${communityHouseholds} Households over 90 Winter Days):`,
+                `--------------------------------------------------`,
+                `- Total Fine PM2.5 Kept Out of Airshed: ${impact.communitySeasonalPm25AvoidedKg} kg`,
+                `- Equivalent Cold-Start Winter Car Trips Removed: ${impact.equivalentCarTripsRemoved.toLocaleString()}`,
+                `- Community Greenhouse Gas Avoided: ${impact.communitySeasonalCo2AvoidedTonnes} tonnes CO2e`,
+                ``,
+                `Generated with VinterKlar — Winter Smog & Urban Clean-Air Assistant`,
+              ].join('\n');
+
+              const blob = new Blob([summaryText], { type: 'text/plain;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `VinterKlar_Impact_Summary_${airBrief.city.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-[#13221F] bg-white border border-[#D8E2DF] hover:bg-[#EDF2F0] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+          >
+            <Download className="w-3.5 h-3.5 text-[#175946]" />
+            Download Summary (.txt)
+          </button>
+          <button
+            type="button"
             onClick={() => window.print()}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-[#13221F] bg-white border border-[#D8E2DF] hover:bg-[#EDF2F0] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
             <Printer className="w-3.5 h-3.5 text-[#4A5C58]" />
-            Print Checklist
+            Print / Save PDF
           </button>
         </div>
       </div>
