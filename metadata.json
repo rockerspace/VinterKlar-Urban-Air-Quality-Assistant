@@ -1,0 +1,6 @@
+{
+  "name": "VinterKlar",
+  "description": "GenAI-powered winter smog and urban clean-air assistant for families and communities with tailored low-emission routines, indoor air quality hacks, sustainable alternatives, and a direct impact calculator.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
