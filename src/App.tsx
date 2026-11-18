@@ -251,12 +251,18 @@ export default function App() {
       {/* Strict 3-Zone Top Bar Contract */}
       <header className="bg-white/95 backdrop-blur-sm border-b border-[#D8E2DF] sticky top-0 z-40">
         <div className="max-w-[1200px] mx-auto px-6 py-3.5 flex items-center justify-between gap-8">
-          {/* Zone 1: Single text wordmark */}
+          {/* Zone 1: Single text wordmark with generated logo */}
           <a
             href="#top"
-            className="text-lg font-bold tracking-tight text-[#13221F] whitespace-nowrap shrink-0"
+            className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-[#13221F] whitespace-nowrap shrink-0"
           >
-            VinterKlar
+            <img
+              src="/src/assets/images/vinterklar_logo_1795009757270.jpg"
+              alt="VinterKlar Logo"
+              className="w-7 h-7 rounded-md object-cover border border-[#D8E2DF]"
+              referrerPolicy="no-referrer"
+            />
+            <span>VinterKlar</span>
           </a>
 
           {/* Zone 2: 4 single-line text nav links */}
