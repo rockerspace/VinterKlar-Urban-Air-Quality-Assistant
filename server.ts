@@ -3,6 +3,14 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
+import {
+  extractJsonBlock,
+  formatApiError,
+  isSafeHttpUrl,
+  sanitizeChatMessages,
+  sanitizeCityInput,
+  validateCoordinates,
+} from './serverHelpers.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,57 +35,33 @@ function getAiClient(): GoogleGenAI {
   });
 }
 
-function formatApiError(err: unknown): { status: number; message: string } {
-  const raw = err instanceof Error ? err.message : String(err);
-  if (raw.includes('GEMINI_API_KEY is not configured')) {
-    return { status: 500, message: raw };
-  }
-  if (raw.includes('403') || raw.includes('PERMISSION_DENIED') || raw.includes('API_KEY_INVALID')) {
-    return {
-      status: 403,
-      message: 'API key permission or validation error. Please verify your key in Settings > Secrets.',
-    };
-  }
-  if (raw.includes('429') || raw.includes('RESOURCE_EXHAUSTED')) {
-    return {
-      status: 429,
-      message: 'Gemini API rate limit reached. Please wait a moment and try again.',
-    };
-  }
-  if (raw.includes('404') || raw.includes('NOT_FOUND')) {
-    return {
-      status: 404,
-      message: 'Requested Gemini model could not be found.',
-    };
-  }
-  return { status: 500, message: raw || 'Unexpected server error while querying Gemini.' };
-}
-
-function extractJsonBlock(text: string): unknown {
-  const fencedMatch = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/);
-  const candidate = fencedMatch ? fencedMatch[1].trim() : text.trim();
-  const firstBrace = candidate.indexOf('{');
-  const lastBrace = candidate.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return JSON.parse(candidate.slice(firstBrace, lastBrace + 1));
-  }
-  return JSON.parse(candidate);
-}
-
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '1mb' }));
+  app.disable('x-powered-by');
+  app.use(express.json({ limit: '512kb' }));
+
+  // Hardened HTTP security headers
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+    next();
+  });
 
   // 1. Live Grounded Local Winter Smog & Air Quality Brief
   app.post('/api/air-brief', async (req, res) => {
+    let input;
     try {
-      const { city, regionContext } = req.body ?? {};
-      if (!city || typeof city !== 'string' || !city.trim()) {
-        return res.status(400).json({ error: 'A city or neighborhood name is required.' });
-      }
+      input = sanitizeCityInput(req.body?.city, req.body?.regionContext);
+    } catch (validationErr) {
+      return res.status(400).json({
+        error: validationErr instanceof Error ? validationErr.message : 'Invalid city input.',
+      });
+    }
 
+    try {
       const ai = getAiClient();
-      const prompt = `Look up the latest current or typical winter air quality, PM2.5 levels, AQI, thermal inversion or winter smog advisories, and primary local pollution drivers for "${city.trim()}"${regionContext ? ` (${regionContext})` : ''}.
+      const prompt = `Look up the latest current or typical winter air quality, PM2.5 levels, AQI, thermal inversion or winter smog advisories, and primary local pollution drivers for "${input.city}"${input.regionContext ? ` (${input.regionContext})` : ''}.
 
 Respond ONLY with a valid JSON object inside \`\`\`json ... \`\`\` fences matching this exact schema:
 {
@@ -109,7 +93,7 @@ Respond ONLY with a valid JSON object inside \`\`\`json ... \`\`\` fences matchi
           title: chunk.web?.title || 'Web source',
           url: chunk.web?.uri || '',
         }))
-        .filter((c) => Boolean(c.url))
+        .filter((c) => Boolean(c.url) && isSafeHttpUrl(c.url))
         .slice(0, 5);
 
       const severityRaw = String(parsed.severityLevel || 'Moderate');
@@ -122,7 +106,7 @@ Respond ONLY with a valid JSON object inside \`\`\`json ... \`\`\` fences matchi
           : 'Moderate';
 
       return res.json({
-        city: String(parsed.city || city.trim()),
+        city: String(parsed.city || input.city),
         estimatedAqi: Number(parsed.estimatedAqi) || 110,
         pm25UgM3: Number(parsed.pm25UgM3) || 38.5,
         severityLevel,
@@ -153,15 +137,20 @@ Respond ONLY with a valid JSON object inside \`\`\`json ... \`\`\` fences matchi
 
   // 2. Resolve Coordinates -> City/Region
   app.post('/api/resolve-city', async (req, res) => {
+    let coords;
     try {
-      const { latitude, longitude } = req.body ?? {};
-      if (typeof latitude !== 'number' || typeof longitude !== 'number') {
-        return res.status(400).json({ error: 'Valid latitude and longitude are required.' });
-      }
+      coords = validateCoordinates(req.body?.latitude, req.body?.longitude);
+    } catch (validationErr) {
+      return res.status(400).json({
+        error: validationErr instanceof Error ? validationErr.message : 'Invalid coordinates.',
+      });
+    }
+
+    try {
       const ai = getAiClient();
       const response = await ai.models.generateContent({
         model: MODEL_ID,
-        contents: `Identify the city and region/country for coordinates latitude ${latitude}, longitude ${longitude}, and briefly note its winter air/topography context in 10 words or fewer.`,
+        contents: `Identify the city and region/country for coordinates latitude ${coords.latitude}, longitude ${coords.longitude}, and briefly note its winter air/topography context in 10 words or fewer.`,
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -184,23 +173,31 @@ Respond ONLY with a valid JSON object inside \`\`\`json ... \`\`\` fences matchi
 
   // 3. Tailored Daily Playbook Generator (Routines, IAQ Hacks, Sustainable Swaps)
   app.post('/api/playbook', async (req, res) => {
+    const { profile, airBrief } = req.body ?? {};
+    let cleanCityInput;
     try {
-      const { profile, airBrief } = req.body ?? {};
-      if (!profile || !profile.city) {
-        return res.status(400).json({ error: 'Household profile with city is required.' });
-      }
+      cleanCityInput = sanitizeCityInput(profile?.city, profile?.regionContext);
+    } catch {
+      return res.status(400).json({ error: 'Household profile with city is required.' });
+    }
 
+    try {
       const ai = getAiClient();
+      const householdSize = Math.max(1, Math.min(12, Number(profile?.householdSize) || 4));
+      const sensitive = Array.isArray(profile?.sensitiveMembers)
+        ? profile.sensitiveMembers.map(String).slice(0, 6).join(', ')
+        : 'general family';
+
       const prompt = `Create a tailored winter smog action playbook for this household:
-- City: ${profile.city} (${profile.regionContext || 'urban winter conditions'})
-- Local Air Brief: AQI ${airBrief?.estimatedAqi ?? 'N/A'}, PM2.5 ${airBrief?.pm25UgM3 ?? 'N/A'} ug/m3 (${airBrief?.severityLevel ?? 'Elevated'}), Inversion window: ${airBrief?.inversionWindow ?? 'morning/evening'}, Best outdoor/ventilation window: ${airBrief?.bestVentilationWindow ?? 'early afternoon'}, Primary pollutants: ${airBrief?.primaryPollutants ?? 'PM2.5, NOx'}
-- Household size: ${profile.householdSize} people
-- Sensitive members: ${(profile.sensitiveMembers || []).join(', ') || 'general family'}
-- Heating type: ${profile.heatingType}
-- Primary commute: ${profile.commuteMode}
-- Cooking fuel: ${profile.cookingFuel}
-- Indoor air purifier setup: ${profile.purifierSetup}
-- Home envelope: ${profile.homeDraftiness}
+- City: ${cleanCityInput.city} (${cleanCityInput.regionContext || 'urban winter conditions'})
+- Local Air Brief: AQI ${Number(airBrief?.estimatedAqi) || 'N/A'}, PM2.5 ${Number(airBrief?.pm25UgM3) || 'N/A'} ug/m3 (${String(airBrief?.severityLevel ?? 'Elevated')}), Inversion window: ${String(airBrief?.inversionWindow ?? 'morning/evening').slice(0, 120)}, Best outdoor/ventilation window: ${String(airBrief?.bestVentilationWindow ?? 'early afternoon').slice(0, 120)}, Primary pollutants: ${String(airBrief?.primaryPollutants ?? 'PM2.5, NOx').slice(0, 160)}
+- Household size: ${householdSize} people
+- Sensitive members: ${sensitive || 'general family'}
+- Heating type: ${String(profile?.heatingType || 'natural_gas').slice(0, 40)}
+- Primary commute: ${String(profile?.commuteMode || 'car_solo').slice(0, 40)}
+- Cooking fuel: ${String(profile?.cookingFuel || 'gas_stove').slice(0, 40)}
+- Indoor air purifier setup: ${String(profile?.purifierSetup || 'none').slice(0, 40)}
+- Home envelope: ${String(profile?.homeDraftiness || 'average').slice(0, 40)}
 
 Generate exactly 6 high-impact, realistic recommendations (2 with category "daily_routine", 2 with category "indoor_hack", 2 with category "sustainable_swap") tailored specifically to their city, heating, commute, cooking fuel, and purifier setup.
 Every recommendation MUST clearly explain the direct physical/health/emissions impact of the choice in plain, accurate science.`;
@@ -275,7 +272,7 @@ Every recommendation MUST clearly explain the direct physical/health/emissions i
       };
 
       return res.json({
-        city: profile.city,
+        city: cleanCityInput.city,
         generatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         headlineInsight:
           parsed.headlineInsight ||
@@ -290,27 +287,32 @@ Every recommendation MUST clearly explain the direct physical/health/emissions i
 
   // 4. Contextual Streaming Clean-Air Advisor Chat (SSE)
   app.post('/api/advisor/chat', async (req, res) => {
+    let cleanMessages;
     try {
-      const { messages, profile, airBrief, impactSummary } = req.body ?? {};
-      if (!Array.isArray(messages) || messages.length === 0) {
-        return res.status(400).json({ error: 'Conversation messages are required.' });
-      }
+      cleanMessages = sanitizeChatMessages(req.body?.messages);
+    } catch (validationErr) {
+      return res.status(400).json({
+        error: validationErr instanceof Error ? validationErr.message : 'Invalid messages.',
+      });
+    }
 
+    try {
+      const { profile, airBrief, impactSummary } = req.body ?? {};
       const ai = getAiClient();
       const systemInstruction = `You are the VinterKlar Clean-Air Family & Community Advisor.
 Current Context:
-- Location: ${profile?.city || 'Urban winter city'} (AQI ${airBrief?.estimatedAqi ?? 'N/A'}, PM2.5 ${airBrief?.pm25UgM3 ?? 'N/A'} µg/m³, Severity: ${airBrief?.severityLevel ?? 'Elevated'})
-- Inversion Window: ${airBrief?.inversionWindow ?? 'Morning & Evening'} | Best Ventilation Window: ${airBrief?.bestVentilationWindow ?? 'Early afternoon'}
-- Household: ${profile?.householdSize ?? 4} people, sensitive members: ${(profile?.sensitiveMembers || []).join(', ') || 'none specified'}
-- Home Setup: heating=${profile?.heatingType}, commute=${profile?.commuteMode}, cooking=${profile?.cookingFuel}, purifier=${profile?.purifierSetup}, envelope=${profile?.homeDraftiness}
-- Active Impact Calculator Results: Indoor PM2.5 drops from ${impactSummary?.baselineIndoorPm25 ?? '?'} to ${impactSummary?.mitigatedIndoorPm25 ?? '?'} µg/m³ (-${impactSummary?.indoorDropPct ?? 0}%), Weekly PM2.5 avoided: ${impactSummary?.weeklyPm25AvoidedGrams ?? 0} g.
+- Location: ${String(profile?.city || 'Urban winter city').slice(0, 120)} (AQI ${Number(airBrief?.estimatedAqi) || 'N/A'}, PM2.5 ${Number(airBrief?.pm25UgM3) || 'N/A'} µg/m³, Severity: ${String(airBrief?.severityLevel ?? 'Elevated').slice(0, 30)})
+- Inversion Window: ${String(airBrief?.inversionWindow ?? 'Morning & Evening').slice(0, 120)} | Best Ventilation Window: ${String(airBrief?.bestVentilationWindow ?? 'Early afternoon').slice(0, 120)}
+- Household: ${Math.max(1, Math.min(12, Number(profile?.householdSize) || 4))} people, sensitive members: ${Array.isArray(profile?.sensitiveMembers) ? profile.sensitiveMembers.map(String).slice(0, 6).join(', ') : 'none specified'}
+- Home Setup: heating=${String(profile?.heatingType || 'natural_gas').slice(0, 40)}, commute=${String(profile?.commuteMode || 'car_solo').slice(0, 40)}, cooking=${String(profile?.cookingFuel || 'gas_stove').slice(0, 40)}, purifier=${String(profile?.purifierSetup || 'none').slice(0, 40)}, envelope=${String(profile?.homeDraftiness || 'average').slice(0, 40)}
+- Active Impact Calculator Results: Indoor PM2.5 drops from ${Number(impactSummary?.baselineIndoorPm25) || '?'} to ${Number(impactSummary?.mitigatedIndoorPm25) || '?'} µg/m³ (-${Number(impactSummary?.indoorDropPct) || 0}%), Weekly PM2.5 avoided: ${Number(impactSummary?.weeklyPm25AvoidedGrams) || 0} g.
 
 Guidelines:
 - Give concise, practical, science-backed guidance tailored to this exact family and city.
 - Always explain the direct impact of recommended actions (both personal exposure reduction and community emission reduction).
 - Keep formatting clean with short paragraphs or concise bullet points.`;
 
-      const contents = messages.map((m: { role: string; content: string }) => ({
+      const contents = cleanMessages.map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
       }));

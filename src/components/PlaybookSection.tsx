@@ -99,13 +99,18 @@ export function PlaybookSection({
       )}
 
       {/* Segmented Filter Control */}
-      <div className="flex flex-wrap items-center gap-1 p-1 bg-[#EDF2F0] rounded-lg w-fit mb-6">
+      <div
+        role="group"
+        aria-label="Filter recommendations by category"
+        className="flex flex-wrap items-center gap-1 p-1 bg-[#EDF2F0] rounded-lg w-fit mb-6"
+      >
         {FILTER_TABS.map((tab) => {
           const active = filter === tab.id;
           return (
             <button
               key={tab.id}
               type="button"
+              aria-pressed={active}
               onClick={() => setFilter(tab.id)}
               className={`px-3.5 py-2 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                 active
@@ -208,14 +213,15 @@ export function PlaybookSection({
 
                     <button
                       type="button"
+                      aria-expanded={isExpanded}
                       onClick={() => setExpandedId(isExpanded ? null : rec.id)}
                       className="inline-flex items-center gap-1 text-xs font-medium text-[#175946] hover:text-[#124738] cursor-pointer whitespace-nowrap"
                     >
                       {isExpanded ? 'Hide Steps' : 'How-To Steps'}
                       {isExpanded ? (
-                        <ChevronUp className="w-3.5 h-3.5" />
+                        <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
                       ) : (
-                        <ChevronDown className="w-3.5 h-3.5" />
+                        <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
                       )}
                     </button>
                   </div>

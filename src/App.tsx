@@ -29,6 +29,16 @@ import { PlaybookSection } from './components/PlaybookSection';
 import { IndoorLabSection } from './components/IndoorLabSection';
 import { CommunitySection } from './components/CommunitySection';
 import { AdvisorDrawer } from './components/AdvisorDrawer';
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+function isSafeHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
 
 const STORAGE_KEY = 'vinterklar_state_v1';
 
@@ -248,6 +258,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F9F8] text-[#13221F]">
+      <a
+        href="#top"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#175946] focus:text-white focus:rounded-lg focus:text-xs focus:font-semibold"
+      >
+        Skip to main content
+      </a>
       {/* Strict 3-Zone Top Bar Contract */}
       <header className="bg-white/95 backdrop-blur-sm border-b border-[#D8E2DF] sticky top-0 z-40">
         <div className="max-w-[1200px] mx-auto px-6 py-3.5 flex items-center justify-between gap-8">
@@ -310,7 +326,8 @@ export default function App() {
         </div>
       </header>
 
-      <main id="top" className="flex-1 max-w-[1200px] w-full mx-auto px-6">
+      <ErrorBoundary>
+        <main id="top" className="flex-1 max-w-[1200px] w-full mx-auto px-6">
         {/* Hero Split */}
         <section className="py-10 lg:py-12">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
@@ -449,21 +466,23 @@ export default function App() {
           </div>
 
           {/* Grounding Citations when fetched live */}
-          {airBrief.citations.length > 0 && (
+          {airBrief.citations.filter((c) => isSafeHttpUrl(c.url)).length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#4A5C58]">
               <span className="font-medium text-[#13221F]">Grounded local sources:</span>
-              {airBrief.citations.map((cite) => (
-                <a
-                  key={cite.url}
-                  href={cite.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[#175946] hover:underline"
-                >
-                  <span className="truncate max-w-[220px]">{cite.title}</span>
-                  <ExternalLink className="w-3 h-3 shrink-0" />
-                </a>
-              ))}
+              {airBrief.citations
+                .filter((c) => isSafeHttpUrl(c.url))
+                .map((cite) => (
+                  <a
+                    key={cite.url}
+                    href={cite.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[#175946] hover:underline"
+                  >
+                    <span className="truncate max-w-[220px]">{cite.title}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" aria-hidden="true" />
+                  </a>
+                ))}
             </div>
           )}
         </section>
@@ -500,7 +519,8 @@ export default function App() {
           airBrief={airBrief}
           activeInterventionsCount={activeInterventions.length}
         />
-      </main>
+        </main>
+      </ErrorBoundary>
 
       {/* Quiet Footer */}
       <footer className="border-t border-[#D8E2DF] bg-white py-8 mt-8">

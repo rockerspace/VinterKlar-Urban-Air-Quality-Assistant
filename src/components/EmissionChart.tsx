@@ -22,56 +22,61 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export function EmissionChart({ impact, cityName }: EmissionChartProps) {
   const [metricType, setMetricType] = useState<'pm25' | 'co2'>('pm25');
 
-  // Generate 7-day cumulative or daily projection data based on current impact results
-  const dailyPm25Avoided = impact.weeklyPm25AvoidedGrams / 7;
+  const dailyBaselineExposureMg = impact.baselineDailyInhaledUg / 1000;
+  const dailyMitigatedExposureMg = impact.mitigatedDailyInhaledUg / 1000;
   const dailyCo2Avoided = impact.weeklyCo2AvoidedKg / 7;
-  const dailyBaselineExposureUg = impact.baselineDailyInhaledUg;
-  const dailyMitigatedExposureUg = impact.mitigatedDailyInhaledUg;
-
-  let cumulativeAvoided = 0;
-  let cumulativeBaselineExposure = 0;
-  let cumulativeMitigatedExposure = 0;
+  // Representative baseline household weekly winter heating + commute footprint (~95 kg/week)
+  const dailyBaselineCo2 = Math.max(dailyCo2Avoided + 4.5, 13.5);
 
   const chartData = DAYS.map((day, idx) => {
-    const factor = (idx + 1) / 7;
+    const dayIndex = idx + 1;
     if (metricType === 'pm25') {
-      cumulativeAvoided += dailyPm25Avoided;
-      cumulativeBaselineExposure += dailyBaselineExposureUg / 1000; // mg
-      cumulativeMitigatedExposure += dailyMitigatedExposureUg / 1000; // mg
+      const baselineTotal = Number((dailyBaselineExposureMg * dayIndex).toFixed(2));
+      const mitigatedTotal = Number((dailyMitigatedExposureMg * dayIndex).toFixed(2));
       return {
         day,
-        Baseline: Number(cumulativeBaselineExposure.toFixed(1)),
-        Mitigated: Number(cumulativeMitigatedExposure.toFixed(1)),
-        Avoided: Number(cumulativeAvoided.toFixed(2)),
-      };
-    } else {
-      const co2Val = Number((dailyCo2Avoided * (idx + 1)).toFixed(1));
-      const baselineCo2Val = Number((dailyCo2Avoided * 1.8 * (idx + 1)).toFixed(1));
-      return {
-        day,
-        Baseline: baselineCo2Val,
-        Mitigated: co2Val,
-        Avoided: Number((baselineCo2Val - co2Val).toFixed(1)),
+        Baseline: baselineTotal,
+        Mitigated: mitigatedTotal,
       };
     }
+    const baselineCo2Total = Number((dailyBaselineCo2 * dayIndex).toFixed(1));
+    const mitigatedCo2Total = Number(
+      Math.max(0, (dailyBaselineCo2 - dailyCo2Avoided) * dayIndex).toFixed(1),
+    );
+    return {
+      day,
+      Baseline: baselineCo2Total,
+      Mitigated: mitigatedCo2Total,
+    };
   });
 
   return (
-    <div className="bg-white border border-[#D8E2DF] rounded-xl p-6 mt-6">
+    <div
+      className="bg-white border border-[#D8E2DF] rounded-xl p-6 mt-6"
+      role="region"
+      aria-label={`7-day projected impact chart for ${cityName}`}
+    >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2 text-xs text-[#4A5C58] mb-1">
-            <BarChart3 className="w-4 h-4 text-[#175946]" />
+            <BarChart3 className="w-4 h-4 text-[#175946]" aria-hidden="true" />
             <span>7-Day Projected Impact Trajectory · {cityName}</span>
           </div>
           <h3 className="text-base font-semibold text-[#13221F]">
-            {metricType === 'pm25' ? 'Cumulative Inhaled PM2.5 Dose (mg)' : 'Cumulative CO2e Emissions (kg)'}
+            {metricType === 'pm25'
+              ? 'Cumulative Inhaled PM2.5 Dose (mg)'
+              : 'Cumulative Weekly Carbon Emissions (kg CO2e)'}
           </h3>
         </div>
 
-        <div className="flex items-center gap-1 p-1 bg-[#EDF2F0] rounded-lg shrink-0">
+        <div
+          role="group"
+          aria-label="Chart metric selector"
+          className="flex items-center gap-1 p-1 bg-[#EDF2F0] rounded-lg shrink-0"
+        >
           <button
             type="button"
+            aria-pressed={metricType === 'pm25'}
             onClick={() => setMetricType('pm25')}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
               metricType === 'pm25'
@@ -83,6 +88,7 @@ export function EmissionChart({ impact, cityName }: EmissionChartProps) {
           </button>
           <button
             type="button"
+            aria-pressed={metricType === 'co2'}
             onClick={() => setMetricType('co2')}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
               metricType === 'co2'
@@ -96,7 +102,7 @@ export function EmissionChart({ impact, cityName }: EmissionChartProps) {
       </div>
 
       <div className="w-full h-72">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={288} minWidth={200}>
           <AreaChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
             <defs>
               <linearGradient id="colorBaseline" x1="0" y1="0" x2="0" y2="1">
@@ -164,9 +170,9 @@ export function EmissionChart({ impact, cityName }: EmissionChartProps) {
         </ResponsiveContainer>
       </div>
 
-      <div className="mt-4 pt-4 border-t border-[#D8E2DF] flex items-center justify-between text-xs text-[#4A5C58]">
+      <div className="mt-4 pt-4 border-t border-[#D8E2DF] flex flex-wrap items-center justify-between gap-2 text-xs text-[#4A5C58]">
         <div className="flex items-center gap-1.5">
-          <Calendar className="w-3.5 h-3.5 text-[#175946]" />
+          <Calendar className="w-3.5 h-3.5 text-[#175946]" aria-hidden="true" />
           <span>7-day rolling trajectory based on your active calculator toggles</span>
         </div>
         <span className="font-mono tabular-nums font-semibold text-[#175946]">

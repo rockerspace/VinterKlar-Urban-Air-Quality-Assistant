@@ -63,10 +63,11 @@ export function ImpactCalculator({
         <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
+            aria-expanded={showMethodology}
             onClick={() => setShowMethodology((s) => !s)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#13221F] bg-white border border-[#D8E2DF] hover:bg-[#EDF2F0] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
-            <Info className="w-3.5 h-3.5 text-[#175946]" />
+            <Info className="w-3.5 h-3.5 text-[#175946]" aria-hidden="true" />
             {showMethodology ? 'Hide Physics Math' : 'Explain Calculation Math'}
           </button>
           <button
@@ -243,38 +244,37 @@ export function ImpactCalculator({
                 return (
                   <label
                     key={item.id}
+                    htmlFor={`intervention-${item.id}`}
                     className="flex items-start gap-3 py-3.5 first:pt-1 last:pb-1 cursor-pointer group"
                   >
-                    <button
-                      type="button"
-                      role="checkbox"
-                      aria-checked={isChecked}
-                      onClick={() => onToggleIntervention(item.id)}
-                      className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center border shrink-0 transition-colors cursor-pointer ${
+                    <input
+                      id={`intervention-${item.id}`}
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => onToggleIntervention(item.id)}
+                      className="sr-only peer"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center border shrink-0 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[#175946] peer-focus-visible:ring-offset-1 ${
                         isChecked
                           ? 'bg-[#175946] border-[#175946] text-white'
                           : 'bg-white border-[#B9C9C4] group-hover:border-[#175946]'
                       }`}
                     >
                       {isChecked && <Check className="w-3.5 h-3.5" strokeWidth={2.5} />}
-                    </button>
-                    <div
-                      className="flex-1 min-w-0"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        onToggleIntervention(item.id);
-                      }}
-                    >
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <span className="text-sm font-medium text-[#13221F]">{item.label}</span>
                         <span className="text-xs text-[#4A5C58]">
                           · {CATEGORY_LABELS[item.category]}
                         </span>
-                      </div>
-                      <p className="text-xs text-[#4A5C58] mt-0.5">
+                      </span>
+                      <span className="block text-xs text-[#4A5C58] mt-0.5">
                         {item.shortMechanism} — {item.directImpactNote}
-                      </p>
-                    </div>
+                      </span>
+                    </span>
                   </label>
                 );
               })}

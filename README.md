@@ -55,7 +55,7 @@ All AI calls run securely on the server side (`server.ts`) via the `@google/gena
 
 ---
 
-## Local Development
+## Local Development & Verification
 
 ```bash
 npm install
@@ -63,6 +63,12 @@ npm install
 npm run dev
 ```
 
+- `npm test` — Run automated Vitest unit, security-validation, and React component accessibility tests
 - `npm run lint` — TypeScript type check (`tsc --noEmit`)
 - `npm run build` — Production Vite bundle
 - `npm start` — Run production Express server (`server.ts`)
+
+### Test Coverage
+- **Physics & Emission Engine (`src/data/__tests__/cleanAirData.test.ts`)**: Verifies indoor PM2.5 infiltration math, filtration reductions, cold-start/woodsmoke/cooking emission factors, community multiplier scaling, and zero-value edge cases.
+- **Server Security & Validation (`serverHelpers.test.ts`)**: Verifies input bounds, coordinate validation, chat history sanitization, markdown JSON extraction, Gemini error mapping, and `http:`/`https:` URL safety filtering.
+- **Interactive UI & Accessibility (`src/components/__tests__/components.test.tsx`)**: Verifies interactive sliders, native accessible checkboxes, category filtering, summary export generation, and Escape-key modal handling.

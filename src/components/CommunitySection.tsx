@@ -17,6 +17,39 @@ const SCALE_OPTIONS = [
   { count: 250, label: '250 Households (District)' },
 ];
 
+export function buildImpactSummaryText(
+  airBrief: LocalAirBrief,
+  impact: ImpactCalculationResult,
+  activeInterventionsCount: number,
+  communityHouseholds: number,
+): string {
+  return [
+    `VinterKlar Clean-Air Action Plan — ${airBrief.city}`,
+    `Generated: ${new Date().toLocaleDateString()}`,
+    `Local Advisory: AQI ${airBrief.estimatedAqi} (${airBrief.severityLevel}) · Peak Inversion: ${airBrief.inversionWindow}`,
+    `Best Afternoon Ventilation Window: ${airBrief.bestVentilationWindow}`,
+    ``,
+    `--------------------------------------------------`,
+    `OUR HOUSEHOLD COMMITMENT (${activeInterventionsCount} active interventions):`,
+    `--------------------------------------------------`,
+    `- Baseline Indoor PM2.5: ${impact.baselineIndoorPm25} ug/m3`,
+    `- Mitigated Indoor PM2.5: ${impact.mitigatedIndoorPm25} ug/m3 (-${impact.indoorDropPct}% reduction)`,
+    `- Daily Inhaled Dose: ${impact.mitigatedDailyInhaledUg} ug/day (down from ${impact.baselineDailyInhaledUg} ug)`,
+    `- Weekly PM2.5 Avoided: ${impact.weeklyPm25AvoidedGrams} g`,
+    `- Weekly Smog NOx Avoided: ${impact.weeklyNoxAvoidedGrams} g`,
+    `- Weekly Carbon Avoided: ${impact.weeklyCo2AvoidedKg} kg CO2e`,
+    ``,
+    `--------------------------------------------------`,
+    `COMMUNITY MULTIPLIER (${communityHouseholds} Households over 90 Winter Days):`,
+    `--------------------------------------------------`,
+    `- Total Fine PM2.5 Kept Out of Airshed: ${impact.communitySeasonalPm25AvoidedKg} kg`,
+    `- Equivalent Cold-Start Winter Car Trips Removed: ${impact.equivalentCarTripsRemoved.toLocaleString()}`,
+    `- Community Greenhouse Gas Avoided: ${impact.communitySeasonalCo2AvoidedTonnes} tonnes CO2e`,
+    ``,
+    `Generated with VinterKlar — Winter Smog & Urban Clean-Air Assistant`,
+  ].join('\n');
+}
+
 export function CommunitySection({
   communityHouseholds,
   onChangeCommunityHouseholds,
@@ -27,28 +60,37 @@ export function CommunitySection({
   const [copied, setCopied] = useState(false);
 
   const handleCopyPledge = async () => {
-    const summaryText = [
-      `VinterKlar Clean-Air Action Plan — ${airBrief.city}`,
-      `Local Advisory: AQI ${airBrief.estimatedAqi} (${airBrief.severityLevel}) · Peak Inversion: ${airBrief.inversionWindow}`,
-      `Best Afternoon Window: ${airBrief.bestVentilationWindow}`,
-      ``,
-      `Our Household Commitment (${activeInterventionsCount} clean-air choices active):`,
-      `- Indoor PM2.5 reduced from ${impact.baselineIndoorPm25} to ${impact.mitigatedIndoorPm25} ug/m3 (-${impact.indoorDropPct}%)`,
-      `- Weekly emissions prevented: ${impact.weeklyPm25AvoidedGrams} g PM2.5, ${impact.weeklyNoxAvoidedGrams} g NOx, ${impact.weeklyCo2AvoidedKg} kg CO2e`,
-      ``,
-      `If ${communityHouseholds} households in our community join for 90 winter days:`,
-      `- ${impact.communitySeasonalPm25AvoidedKg} kg of fine PM2.5 kept out of local inversion air`,
-      `- ${impact.communitySeasonalCo2AvoidedTonnes} tonnes CO2e avoided`,
-      `- Equivalent to removing ${impact.equivalentCarTripsRemoved.toLocaleString()} cold-start 10 km winter car trips`,
-    ].join('\n');
-
+    const summaryText = buildImpactSummaryText(
+      airBrief,
+      impact,
+      activeInterventionsCount,
+      communityHouseholds,
+    );
     try {
       await navigator.clipboard.writeText(summaryText);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // Fallback ignored if clipboard permissions are blocked
+      // Clipboard permissions may be unavailable in restricted frames
     }
+  };
+
+  const handleDownloadSummary = () => {
+    const summaryText = buildImpactSummaryText(
+      airBrief,
+      impact,
+      activeInterventionsCount,
+      communityHouseholds,
+    );
+    const blob = new Blob([summaryText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `VinterKlar_Impact_Summary_${airBrief.city.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -70,10 +112,11 @@ export function CommunitySection({
           </h2>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 shrink-0 print:hidden">
           <button
             type="button"
             onClick={handleCopyPledge}
+            aria-live="polite"
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#175946] hover:bg-[#124738] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -81,43 +124,7 @@ export function CommunitySection({
           </button>
           <button
             type="button"
-            onClick={() => {
-              const summaryText = [
-                `VinterKlar Clean-Air Action Plan — ${airBrief.city}`,
-                `Generated: ${new Date().toLocaleDateString()}`,
-                `Local Advisory: AQI ${airBrief.estimatedAqi} (${airBrief.severityLevel}) · Peak Inversion: ${airBrief.inversionWindow}`,
-                `Best Afternoon Ventilation Window: ${airBrief.bestVentilationWindow}`,
-                ``,
-                `--------------------------------------------------`,
-                `OUR HOUSEHOLD COMMITMENT (${activeInterventionsCount} active interventions):`,
-                `--------------------------------------------------`,
-                `- Baseline Indoor PM2.5: ${impact.baselineIndoorPm25} ug/m3`,
-                `- Mitigated Indoor PM2.5: ${impact.mitigatedIndoorPm25} ug/m3 (-${impact.indoorDropPct}% reduction)`,
-                `- Daily Inhaled Dose: ${impact.mitigatedDailyInhaledUg} ug/day (down from ${impact.baselineDailyInhaledUg} ug)`,
-                `- Weekly PM2.5 Avoided: ${impact.weeklyPm25AvoidedGrams} g`,
-                `- Weekly Smog NOx Avoided: ${impact.weeklyNoxAvoidedGrams} g`,
-                `- Weekly Carbon Avoided: ${impact.weeklyCo2AvoidedKg} kg CO2e`,
-                ``,
-                `--------------------------------------------------`,
-                `COMMUNITY MULTIPLIER (${communityHouseholds} Households over 90 Winter Days):`,
-                `--------------------------------------------------`,
-                `- Total Fine PM2.5 Kept Out of Airshed: ${impact.communitySeasonalPm25AvoidedKg} kg`,
-                `- Equivalent Cold-Start Winter Car Trips Removed: ${impact.equivalentCarTripsRemoved.toLocaleString()}`,
-                `- Community Greenhouse Gas Avoided: ${impact.communitySeasonalCo2AvoidedTonnes} tonnes CO2e`,
-                ``,
-                `Generated with VinterKlar — Winter Smog & Urban Clean-Air Assistant`,
-              ].join('\n');
-
-              const blob = new Blob([summaryText], { type: 'text/plain;charset=utf-8' });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement('a');
-              link.href = url;
-              link.download = `VinterKlar_Impact_Summary_${airBrief.city.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              URL.revokeObjectURL(url);
-            }}
+            onClick={handleDownloadSummary}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-[#13221F] bg-white border border-[#D8E2DF] hover:bg-[#EDF2F0] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5 text-[#175946]" />
@@ -138,7 +145,7 @@ export function CommunitySection({
       <div className="bg-white border border-[#D8E2DF] rounded-xl p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D8E2DF]">
           <div className="flex items-center gap-2.5">
-            <Users className="w-4 h-4 text-[#175946]" />
+            <Users className="w-4 h-4 text-[#175946]" aria-hidden="true" />
             <div>
               <h3 className="text-sm font-semibold text-[#13221F]">
                 Simulate Collective Neighborhood Adoption
@@ -150,13 +157,18 @@ export function CommunitySection({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-[#EDF2F0] rounded-lg shrink-0">
+          <div
+            role="group"
+            aria-label="Neighborhood household scale"
+            className="flex flex-wrap items-center gap-1 p-1 bg-[#EDF2F0] rounded-lg shrink-0"
+          >
             {SCALE_OPTIONS.map((opt) => {
               const active = communityHouseholds === opt.count;
               return (
                 <button
                   key={opt.count}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => onChangeCommunityHouseholds(opt.count)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                     active
