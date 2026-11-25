@@ -1,5 +1,7 @@
 # VinterKlar — Winter Smog & Urban Clean-Air Assistant
 
+[![VinterKlar CI](https://github.com/rockerspace/VinterKlar-Urban-Air-Quality-Assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/rockerspace/VinterKlar-Urban-Air-Quality-Assistant/actions/workflows/ci.yml)
+
 VinterKlar is a GenAI-powered assistant that helps urban families and communities navigate severe winter smog, thermal inversions, and particulate pollution (`PM2.5` / `NOx`). It pairs live location-grounded air intelligence with tailored daily routines, indoor air quality hacks, sustainable alternatives, and a transparent Direct Impact Calculator.
 
 ---
