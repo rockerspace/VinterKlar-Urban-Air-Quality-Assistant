@@ -9,6 +9,7 @@ import type {
   SensitiveMember,
 } from '../types';
 import { CITY_PRESETS } from '../data/cleanAirData';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -37,6 +38,8 @@ export function ProfileModal({
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
 
+  const dialogRef = useDialogA11y(isOpen, onClose);
+
   useEffect(() => {
     if (isOpen) {
       setDraft(profile);
@@ -44,15 +47,6 @@ export function ProfileModal({
       setGeoError(null);
     }
   }, [isOpen, profile]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -120,14 +114,22 @@ export function ProfileModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="profile-modal-title"
+      aria-describedby="profile-modal-desc"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div className="bg-white border border-[#D8E2DF] rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-lg">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="bg-white border border-[#D8E2DF] rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-lg"
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#D8E2DF]">
           <div>
             <h2 id="profile-modal-title" className="text-lg font-semibold text-[#13221F]">
               Location & Household Clean-Air Profile
             </h2>
-            <p className="text-xs text-[#4A5C58] mt-0.5">
+            <p id="profile-modal-desc" className="text-xs text-[#4A5C58] mt-0.5">
               VinterKlar queries live local winter smog advisories and tailors every recommendation.
             </p>
           </div>
@@ -137,7 +139,7 @@ export function ProfileModal({
             className="p-2 rounded-lg text-[#4A5C58] hover:text-[#13221F] hover:bg-[#EDF2F0] transition-colors cursor-pointer"
             aria-label="Close location settings"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -155,15 +157,18 @@ export function ProfileModal({
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-[#175946] hover:text-[#124738] disabled:opacity-50 cursor-pointer whitespace-nowrap"
               >
                 {geoLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                 ) : (
-                  <Navigation className="w-3.5 h-3.5" />
+                  <Navigation className="w-3.5 h-3.5" aria-hidden="true" />
                 )}
                 Use current location
               </button>
             </div>
             <div className="relative">
-              <MapPin className="w-4 h-4 text-[#4A5C58] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <MapPin
+                className="w-4 h-4 text-[#4A5C58] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                aria-hidden="true"
+              />
               <input
                 id="city-input"
                 type="text"
@@ -177,20 +182,25 @@ export function ProfileModal({
                 className="w-full pl-10 pr-4 py-2.5 text-sm bg-[#F7F9F8] border border-[#D8E2DF] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#175946]/25 focus:border-[#175946]"
               />
             </div>
-            {geoError && <p className="text-xs text-[#B91C1C]">{geoError}</p>}
+            {geoError && (
+              <p role="alert" className="text-xs text-[#B91C1C]">
+                {geoError}
+              </p>
+            )}
 
             {/* Quick Presets */}
             <div className="pt-1">
               <span className="block text-xs text-[#4A5C58] mb-2">
                 Quick winter-smog city presets (or enter any city above):
               </span>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Winter smog city presets">
                 {CITY_PRESETS.map((preset) => {
                   const active = draft.city.toLowerCase() === preset.city.toLowerCase();
                   return (
                     <button
                       key={preset.id}
                       type="button"
+                      aria-pressed={active}
                       onClick={() => {
                         setDraft((prev) => ({
                           ...prev,
@@ -331,10 +341,10 @@ export function ProfileModal({
             </div>
           </div>
 
-          <div className="border-t border-[#D8E2DF] pt-5">
-            <span className="block text-xs font-semibold text-[#13221F] mb-2.5">
+          <fieldset className="border-t border-[#D8E2DF] pt-5">
+            <legend className="block text-xs font-semibold text-[#13221F] mb-2.5">
               Sensitive Household Members (adjusts exposure thresholds)
-            </span>
+            </legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {SENSITIVE_OPTIONS.map((opt) => {
                 const checked = draft.sensitiveMembers.includes(opt.id);
@@ -358,7 +368,7 @@ export function ProfileModal({
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#D8E2DF]">
             <button
@@ -373,7 +383,7 @@ export function ProfileModal({
               disabled={isLoading || !draft.city.trim()}
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#175946] hover:bg-[#124738] disabled:opacity-60 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
             >
-              {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isLoading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
               {isLoading ? 'Analyzing Local Smog...' : 'Apply & Generate Local Plan'}
             </button>
           </div>

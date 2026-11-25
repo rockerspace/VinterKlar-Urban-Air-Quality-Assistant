@@ -59,7 +59,10 @@ export function PlaybookSection({
           disabled={isLoading}
           className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-[#175946] hover:bg-[#124738] disabled:opacity-60 rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw
+            className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`}
+            aria-hidden="true"
+          />
           {isLoading ? 'Tailoring Playbook...' : 'Refresh AI Playbook'}
         </button>
       </div>
@@ -85,7 +88,7 @@ export function PlaybookSection({
           className="mb-6 flex items-center justify-between gap-4 p-4 rounded-xl bg-[#FEF2F2] border border-[#FECACA] text-[#991B1B] text-sm"
         >
           <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+            <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
           <button
@@ -126,7 +129,11 @@ export function PlaybookSection({
 
       {/* Loading Skeleton or Recommendation Cards */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div
+          aria-busy="true"
+          aria-label="Loading tailored recommendations"
+          className="grid grid-cols-1 md:grid-cols-2 gap-6"
+        >
           {[1, 2, 3, 4].map((idx) => (
             <div
               key={idx}
@@ -166,6 +173,7 @@ export function PlaybookSection({
 
                     <button
                       type="button"
+                      aria-pressed={isDone}
                       onClick={() => onToggleComplete(rec.id)}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                         isDone
@@ -173,7 +181,7 @@ export function PlaybookSection({
                           : 'bg-white text-[#4A5C58] border-[#D8E2DF] hover:text-[#13221F]'
                       }`}
                     >
-                      <Check className="w-3.5 h-3.5" />
+                      <Check className="w-3.5 h-3.5" aria-hidden="true" />
                       {isDone ? 'Adopted' : 'Adopt Habit'}
                     </button>
                   </div>

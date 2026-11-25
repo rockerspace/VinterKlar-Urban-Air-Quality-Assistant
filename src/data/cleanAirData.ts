@@ -336,56 +336,150 @@ export const CALCULATOR_INTERVENTIONS: InterventionOption[] = [
   },
 ];
 
-export function calculateDirectImpact(
+/**
+ * Published winter air-quality, inhalation, and household emission reference factors
+ * used by the deterministic Direct Impact Calculator.
+ */
+export const IMPACT_MODEL_CONSTANTS = {
+  /** Unsealed residential outdoor-to-indoor PM2.5 infiltration ratio */
+  BASE_INFILTRATION_RATIO: 0.62,
+  /** Infiltration multiplier when exterior doors/windows are weathersealed */
+  WEATHERSEAL_MULTIPLIER: 0.82,
+  /** Steady-state indoor PM2.5 multiplier with 4.5+ ACH MERV-13/HEPA filtration */
+  FILTRATION_MULTIPLIER: 0.48,
+  /** Daily 24h-equivalent indoor PM2.5/NO2 load per hour of unvented gas cooking (µg/m³) */
+  GAS_COOKING_LOAD_PER_HOUR: 6.8,
+  /** Remaining cooking particulate fraction when switching to induction + vented hood */
+  INDUCTION_REMAINING_FRACTION: 0.22,
+  /** Average indoor air breathed over 20 hours (m³/day per person) */
+  INDOOR_AIR_VOLUME_M3: 11.5,
+  /** Average outdoor/commute air breathed over 4 hours (m³/day per person) */
+  OUTDOOR_AIR_VOLUME_M3: 3.0,
+  /** Outdoor PM2.5 multiplier when shifting errands to the afternoon mixing trough */
+  MIDDAY_WINDOW_MULTIPLIER: 0.75,
+  /** Weighted outdoor exposure multiplier when wearing a fitted N95/KF94 mask in transit */
+  N95_OUTDOOR_MULTIPLIER: 0.25,
+  /** Berkeley Earth reference: ~22 µg/m³ 24h average PM2.5 ≈ 1 cigarette/day */
+  CIGARETTE_EQUIV_UG_M3: 22,
+  /** Cold-start winter passenger car emissions per km */
+  CAR_PM25_G_PER_KM: 0.038,
+  CAR_NOX_G_PER_KM: 0.45,
+  CAR_CO2_KG_PER_KM: 0.22,
+  /** Weekly emissions saved by eliminating school/errand idling */
+  IDLE_FREE_PM25_G_PER_WEEK: 3.4,
+  IDLE_FREE_NOX_G_PER_WEEK: 11.5,
+  IDLE_FREE_CO2_KG_PER_WEEK: 4.6,
+  /** Residential wood-burning emission factors per hour */
+  WOOD_PM25_G_PER_HOUR: 18.5,
+  WOOD_NOX_G_PER_HOUR: 2.4,
+  WOOD_CO2_KG_PER_HOUR: 1.8,
+  /** Central heating 2°C thermal setback savings per heating-hour/day */
+  HEATING_SETBACK_NOX_PER_HR: 0.85,
+  HEATING_SETBACK_CO2_PER_HR: 1.45,
+  /** Weekly savings per 45 min/day of unvented gas stove cooking shifted to induction */
+  COOKING_REF_MINUTES: 45,
+  COOKING_PM25_G_PER_REF: 1.6,
+  COOKING_NOX_G_PER_REF: 14.0,
+  COOKING_CO2_KG_PER_REF: 4.2,
+  /** 90-day winter inversion season length in weeks */
+  WEEKS_IN_WINTER: 13,
+  /** PM2.5 emitted by a single 10 km winter cold-start urban car trip (grams) */
+  CAR_TRIP_10KM_PM25_G: 0.38,
+} as const;
+
+interface IndoorPm25Metrics {
+  baselineIndoorPm25: number;
+  mitigatedIndoorPm25: number;
+  indoorDropPct: number;
+}
+
+/**
+ * Models 24-hour indoor PM2.5 concentration from outdoor infiltration,
+ * mechanical filtration, envelope sealing, and indoor gas cooking aerosols.
+ */
+export function calculateIndoorPm25(
   baseline: ImpactBaselineInputs,
-  activeIds: string[],
-  householdSize: number,
-  communityHouseholds: number,
-): ImpactCalculationResult {
-  const active = new Set(activeIds);
+  active: ReadonlySet<string>,
+): IndoorPm25Metrics {
+  const sealedFactor = active.has('weatherseal_windows')
+    ? IMPACT_MODEL_CONSTANTS.WEATHERSEAL_MULTIPLIER
+    : 1.0;
+  const filtrationFactor = active.has('corsi_rosenthal')
+    ? IMPACT_MODEL_CONSTANTS.FILTRATION_MULTIPLIER
+    : 1.0;
 
-  // 1. Indoor PM2.5 physics: I_in = I_out * infiltrationRatio * (1 - filtration) + indoorCookingSpike
-  const baseInfiltration = 0.62;
-  const sealedFactor = active.has('weatherseal_windows') ? 0.82 : 1.0;
-  const filtrationFactor = active.has('corsi_rosenthal') ? 0.48 : 1.0;
-
-  // Gas cooking without induction/ventilation adds ~5.5 ug/m3 24h average indoor PM2.5/NO2-equivalent load
-  const baseCookingLoad = (baseline.gasCookingMinutesPerDay / 60) * 6.8;
+  const baseCookingLoad =
+    (baseline.gasCookingMinutesPerDay / 60) * IMPACT_MODEL_CONSTANTS.GAS_COOKING_LOAD_PER_HOUR;
   const mitigatedCookingLoad = active.has('induction_swap')
-    ? baseCookingLoad * 0.22
+    ? baseCookingLoad * IMPACT_MODEL_CONSTANTS.INDUCTION_REMAINING_FRACTION
     : baseCookingLoad;
 
   const baselineIndoorPm25 = Number(
-    (baseline.outdoorPm25UgM3 * baseInfiltration + baseCookingLoad).toFixed(1),
+    (baseline.outdoorPm25UgM3 * IMPACT_MODEL_CONSTANTS.BASE_INFILTRATION_RATIO + baseCookingLoad).toFixed(1),
   );
   const mitigatedIndoorPm25 = Number(
     (
-      baseline.outdoorPm25UgM3 * baseInfiltration * sealedFactor * filtrationFactor +
+      baseline.outdoorPm25UgM3 *
+        IMPACT_MODEL_CONSTANTS.BASE_INFILTRATION_RATIO *
+        sealedFactor *
+        filtrationFactor +
       mitigatedCookingLoad
     ).toFixed(1),
   );
+
   const indoorDropPct =
     baselineIndoorPm25 > 0
       ? Math.round(((baselineIndoorPm25 - mitigatedIndoorPm25) / baselineIndoorPm25) * 100)
       : 0;
 
-  // 2. Daily Inhaled Dose (ug/day per person): 20h indoors (~11.5 m3), 4h outdoors/transit (~3.0 m3)
-  const indoorAirVolM3 = 11.5;
-  const outdoorAirVolM3 = 3.0;
+  return { baselineIndoorPm25, mitigatedIndoorPm25, indoorDropPct };
+}
+
+interface InhaledDoseMetrics {
+  baselineDailyInhaledUg: number;
+  mitigatedDailyInhaledUg: number;
+  familyDailyInhaledUg: number;
+  familyDailyAvoidedUg: number;
+  inhaledDoseDropPct: number;
+  cigaretteEquivBefore: number;
+  cigaretteEquivAfter: number;
+}
+
+/**
+ * Computes per-person and total-household daily inhaled PM2.5 dose (µg/day)
+ * and Berkeley Earth cigarette-equivalent exposure.
+ */
+export function calculateInhaledDose(
+  outdoorPm25UgM3: number,
+  indoor: IndoorPm25Metrics,
+  active: ReadonlySet<string>,
+  householdSize: number,
+): InhaledDoseMetrics {
+  const { INDOOR_AIR_VOLUME_M3, OUTDOOR_AIR_VOLUME_M3, CIGARETTE_EQUIV_UG_M3 } =
+    IMPACT_MODEL_CONSTANTS;
+  const totalVolume = INDOOR_AIR_VOLUME_M3 + OUTDOOR_AIR_VOLUME_M3;
+  const safeMembers = Math.max(1, Math.round(householdSize || 1));
 
   const baselineDailyInhaledUg = Number(
     (
-      baselineIndoorPm25 * indoorAirVolM3 +
-      baseline.outdoorPm25UgM3 * outdoorAirVolM3
+      indoor.baselineIndoorPm25 * INDOOR_AIR_VOLUME_M3 +
+      outdoorPm25UgM3 * OUTDOOR_AIR_VOLUME_M3
     ).toFixed(0),
   );
 
-  const outdoorTimingFactor = active.has('midday_window') ? 0.75 : 1.0;
-  const maskFactor = active.has('n95_commute') ? 0.25 : 1.0; // Weighted across outdoor errands/transit
-  const effectiveOutdoorPm25 = baseline.outdoorPm25UgM3 * outdoorTimingFactor * maskFactor;
+  const outdoorTimingFactor = active.has('midday_window')
+    ? IMPACT_MODEL_CONSTANTS.MIDDAY_WINDOW_MULTIPLIER
+    : 1.0;
+  const maskFactor = active.has('n95_commute')
+    ? IMPACT_MODEL_CONSTANTS.N95_OUTDOOR_MULTIPLIER
+    : 1.0;
+  const effectiveOutdoorPm25 = outdoorPm25UgM3 * outdoorTimingFactor * maskFactor;
 
   const mitigatedDailyInhaledUg = Number(
-    (mitigatedIndoorPm25 * indoorAirVolM3 + effectiveOutdoorPm25 * outdoorAirVolM3).toFixed(0),
+    (
+      indoor.mitigatedIndoorPm25 * INDOOR_AIR_VOLUME_M3 +
+      effectiveOutdoorPm25 * OUTDOOR_AIR_VOLUME_M3
+    ).toFixed(0),
   );
 
   const inhaledDoseDropPct =
@@ -395,44 +489,67 @@ export function calculateDirectImpact(
         )
       : 0;
 
-  // Berkeley Earth equivalence: ~22 ug/m3 24h average exposure ~ 1 cigarette/day
-  const timeWeightedBeforeUgM3 = baselineDailyInhaledUg / (indoorAirVolM3 + outdoorAirVolM3);
-  const timeWeightedAfterUgM3 = mitigatedDailyInhaledUg / (indoorAirVolM3 + outdoorAirVolM3);
-  const cigaretteEquivBefore = Number((timeWeightedBeforeUgM3 / 22).toFixed(2));
-  const cigaretteEquivAfter = Number((timeWeightedAfterUgM3 / 22).toFixed(2));
+  const familyDailyInhaledUg = mitigatedDailyInhaledUg * safeMembers;
+  const familyDailyAvoidedUg = Math.max(0, baselineDailyInhaledUg - mitigatedDailyInhaledUg) * safeMembers;
 
-  // 3. Direct Household Emissions Avoided per week
-  // Transport (exhaust + winter cold-start + brake/tire wear ~ 0.038 g PM2.5/km, 0.45 g NOx/km, 0.22 kg CO2/km)
+  const cigaretteEquivBefore = Number(
+    (baselineDailyInhaledUg / totalVolume / CIGARETTE_EQUIV_UG_M3).toFixed(2),
+  );
+  const cigaretteEquivAfter = Number(
+    (mitigatedDailyInhaledUg / totalVolume / CIGARETTE_EQUIV_UG_M3).toFixed(2),
+  );
+
+  return {
+    baselineDailyInhaledUg,
+    mitigatedDailyInhaledUg,
+    familyDailyInhaledUg,
+    familyDailyAvoidedUg,
+    inhaledDoseDropPct,
+    cigaretteEquivBefore,
+    cigaretteEquivAfter,
+  };
+}
+
+interface WeeklyEmissionMetrics {
+  weeklyPm25AvoidedGrams: number;
+  weeklyNoxAvoidedGrams: number;
+  weeklyCo2AvoidedKg: number;
+  sourceBreakdown: ImpactCalculationResult['sourceBreakdown'];
+}
+
+/**
+ * Calculates weekly direct household PM2.5, NOx, and CO2e emissions avoided
+ * across transport, wood/heating, and cooking sources with source attribution.
+ */
+export function calculateWeeklyEmissions(
+  baseline: ImpactBaselineInputs,
+  active: ReadonlySet<string>,
+): WeeklyEmissionMetrics {
+  const C = IMPACT_MODEL_CONSTANTS;
   const weeklyCarKm = baseline.dailyCarKm * 7;
   const avoidedCarKm = active.has('skip_cold_trips') ? weeklyCarKm * 0.5 : 0;
-  const carPm25Avoided = avoidedCarKm * 0.038 + (active.has('idle_free') ? 3.4 : 0);
-  const carNoxAvoided = avoidedCarKm * 0.45 + (active.has('idle_free') ? 11.5 : 0);
-  const carCo2Avoided = avoidedCarKm * 0.22 + (active.has('idle_free') ? 4.6 : 0);
 
-  // Wood burning + Space heating setback
-  const woodPm25Avoided = active.has('stop_wood_burn')
-    ? baseline.woodBurnHoursPerWeek * 18.5
-    : 0;
-  const woodNoxAvoided = active.has('stop_wood_burn')
-    ? baseline.woodBurnHoursPerWeek * 2.4
-    : 0;
-  const heatingSetbackNox = active.has('stop_wood_burn')
-    ? baseline.heatingHoursPerDay * 0.85
-    : 0;
-  const heatingSetbackCo2 = active.has('stop_wood_burn')
-    ? baseline.heatingHoursPerDay * 1.45 + baseline.woodBurnHoursPerWeek * 1.8
+  const carPm25Avoided =
+    avoidedCarKm * C.CAR_PM25_G_PER_KM + (active.has('idle_free') ? C.IDLE_FREE_PM25_G_PER_WEEK : 0);
+  const carNoxAvoided =
+    avoidedCarKm * C.CAR_NOX_G_PER_KM + (active.has('idle_free') ? C.IDLE_FREE_NOX_G_PER_WEEK : 0);
+  const carCo2Avoided =
+    avoidedCarKm * C.CAR_CO2_KG_PER_KM + (active.has('idle_free') ? C.IDLE_FREE_CO2_KG_PER_WEEK : 0);
+
+  const woodPaused = active.has('stop_wood_burn');
+  const woodPm25Avoided = woodPaused ? baseline.woodBurnHoursPerWeek * C.WOOD_PM25_G_PER_HOUR : 0;
+  const woodNoxAvoided = woodPaused ? baseline.woodBurnHoursPerWeek * C.WOOD_NOX_G_PER_HOUR : 0;
+  const heatingSetbackNox = woodPaused ? baseline.heatingHoursPerDay * C.HEATING_SETBACK_NOX_PER_HR : 0;
+  const heatingSetbackCo2 = woodPaused
+    ? baseline.heatingHoursPerDay * C.HEATING_SETBACK_CO2_PER_HR +
+      baseline.woodBurnHoursPerWeek * C.WOOD_CO2_KG_PER_HOUR
     : 0;
 
-  // Cooking fuel shift
-  const cookingPm25Avoided = active.has('induction_swap')
-    ? (baseline.gasCookingMinutesPerDay / 45) * 1.6
-    : 0;
-  const cookingNoxAvoided = active.has('induction_swap')
-    ? (baseline.gasCookingMinutesPerDay / 45) * 14.0
-    : 0;
-  const cookingCo2Avoided = active.has('induction_swap')
-    ? (baseline.gasCookingMinutesPerDay / 45) * 4.2
-    : 0;
+  const cookingRatio = baseline.gasCookingMinutesPerDay / C.COOKING_REF_MINUTES;
+  const inductionActive = active.has('induction_swap');
+  const cookingPm25Avoided = inductionActive ? cookingRatio * C.COOKING_PM25_G_PER_REF : 0;
+  const cookingNoxAvoided = inductionActive ? cookingRatio * C.COOKING_NOX_G_PER_REF : 0;
+  const cookingCo2Avoided = inductionActive ? cookingRatio * C.COOKING_CO2_KG_PER_REF : 0;
 
   const weeklyPm25AvoidedGrams = Number(
     (carPm25Avoided + woodPm25Avoided + cookingPm25Avoided).toFixed(1),
@@ -444,76 +561,85 @@ export function calculateDirectImpact(
     (carCo2Avoided + heatingSetbackCo2 + cookingCo2Avoided).toFixed(1),
   );
 
-  // 90-day winter smog season (~13 weeks)
-  const weeksInWinter = 13;
-  const seasonalPm25AvoidedKg = Number(((weeklyPm25AvoidedGrams * weeksInWinter) / 1000).toFixed(2));
-  const seasonalNoxAvoidedKg = Number(((weeklyNoxAvoidedGrams * weeksInWinter) / 1000).toFixed(2));
-  const seasonalCo2AvoidedKg = Number((weeklyCo2AvoidedKg * weeksInWinter).toFixed(0));
+  const woodPotential = baseline.woodBurnHoursPerWeek * C.WOOD_PM25_G_PER_HOUR;
+  const carPotential = weeklyCarKm * C.CAR_PM25_G_PER_KM + C.IDLE_FREE_PM25_G_PER_WEEK;
+  const cookingPotential = cookingRatio * C.COOKING_PM25_G_PER_REF;
+  const safeDiv = Math.max(1, woodPotential + carPotential + cookingPotential);
 
-  const communitySeasonalPm25AvoidedKg = Number(
-    (seasonalPm25AvoidedKg * communityHouseholds).toFixed(1),
-  );
-  const communitySeasonalCo2AvoidedTonnes = Number(
-    ((seasonalCo2AvoidedKg * communityHouseholds) / 1000).toFixed(1),
-  );
-  // 10 km winter cold-start car trip emits ~0.38 g PM2.5
-  const equivalentCarTripsRemoved = Math.round(
-    (communitySeasonalPm25AvoidedKg * 1000) / 0.38,
-  );
-
-  // Source attribution for visual breakdown
-  const totalPotentialPm25 =
-    weeklyCarKm * 0.038 +
-    3.4 +
-    baseline.woodBurnHoursPerWeek * 18.5 +
-    (baseline.gasCookingMinutesPerDay / 45) * 1.6;
-
-  const safeDiv = totalPotentialPm25 > 0 ? totalPotentialPm25 : 1;
+  const woodShare = Math.round((woodPotential / safeDiv) * 100);
+  const carShare = Math.round((carPotential / safeDiv) * 100);
 
   const sourceBreakdown = [
     {
       label: 'Residential Wood & Hearth',
-      baselineSharePct: Math.round(((baseline.woodBurnHoursPerWeek * 18.5) / safeDiv) * 100),
+      baselineSharePct: woodShare,
       avoidedGramsPm25: Number(woodPm25Avoided.toFixed(1)),
     },
     {
       label: 'Cold-Start Commute & Idling',
-      baselineSharePct: Math.round(((weeklyCarKm * 0.038 + 3.4) / safeDiv) * 100),
+      baselineSharePct: carShare,
       avoidedGramsPm25: Number(carPm25Avoided.toFixed(1)),
     },
     {
       label: 'Indoor Gas & Cooking Aerosols',
-      baselineSharePct: Math.max(
-        1,
-        100 -
-          Math.round(((baseline.woodBurnHoursPerWeek * 18.5) / safeDiv) * 100) -
-          Math.round(((weeklyCarKm * 0.038 + 3.4) / safeDiv) * 100),
-      ),
+      baselineSharePct: Math.max(1, 100 - woodShare - carShare),
       avoidedGramsPm25: Number(cookingPm25Avoided.toFixed(1)),
     },
   ];
 
-  // Keep householdSize acknowledged for total family exposure context if needed downstream
-  void householdSize;
-
   return {
-    baselineIndoorPm25,
-    mitigatedIndoorPm25,
-    indoorDropPct,
-    baselineDailyInhaledUg,
-    mitigatedDailyInhaledUg,
-    inhaledDoseDropPct,
-    cigaretteEquivBefore,
-    cigaretteEquivAfter,
     weeklyPm25AvoidedGrams,
     weeklyNoxAvoidedGrams,
     weeklyCo2AvoidedKg,
+    sourceBreakdown,
+  };
+}
+
+/**
+ * Evaluates deterministic personal exposure reductions, household-wide inhaled dose,
+ * direct weekly/seasonal emissions avoided, and neighborhood multiplier impact.
+ */
+export function calculateDirectImpact(
+  baseline: ImpactBaselineInputs,
+  activeIds: string[],
+  householdSize: number,
+  communityHouseholds: number,
+): ImpactCalculationResult {
+  const active = new Set(activeIds);
+  const indoor = calculateIndoorPm25(baseline, active);
+  const dose = calculateInhaledDose(baseline.outdoorPm25UgM3, indoor, active, householdSize);
+  const emissions = calculateWeeklyEmissions(baseline, active);
+
+  const { WEEKS_IN_WINTER, CAR_TRIP_10KM_PM25_G } = IMPACT_MODEL_CONSTANTS;
+  const safeCommunityHouseholds = Math.max(1, Math.round(communityHouseholds || 1));
+
+  const seasonalPm25AvoidedKg = Number(
+    ((emissions.weeklyPm25AvoidedGrams * WEEKS_IN_WINTER) / 1000).toFixed(2),
+  );
+  const seasonalNoxAvoidedKg = Number(
+    ((emissions.weeklyNoxAvoidedGrams * WEEKS_IN_WINTER) / 1000).toFixed(2),
+  );
+  const seasonalCo2AvoidedKg = Number((emissions.weeklyCo2AvoidedKg * WEEKS_IN_WINTER).toFixed(0));
+
+  const communitySeasonalPm25AvoidedKg = Number(
+    (seasonalPm25AvoidedKg * safeCommunityHouseholds).toFixed(1),
+  );
+  const communitySeasonalCo2AvoidedTonnes = Number(
+    ((seasonalCo2AvoidedKg * safeCommunityHouseholds) / 1000).toFixed(1),
+  );
+  const equivalentCarTripsRemoved = Math.round(
+    (communitySeasonalPm25AvoidedKg * 1000) / CAR_TRIP_10KM_PM25_G,
+  );
+
+  return {
+    ...indoor,
+    ...dose,
+    ...emissions,
     seasonalPm25AvoidedKg,
     seasonalNoxAvoidedKg,
     seasonalCo2AvoidedKg,
     communitySeasonalPm25AvoidedKg,
     communitySeasonalCo2AvoidedTonnes,
     equivalentCarTripsRemoved,
-    sourceBreakdown,
   };
 }

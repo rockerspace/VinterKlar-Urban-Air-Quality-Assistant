@@ -75,7 +75,7 @@ export function ImpactCalculator({
             onClick={onResetDefaults}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#4A5C58] hover:text-[#13221F] bg-white border border-[#D8E2DF] hover:bg-[#EDF2F0] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
             Reset Defaults
           </button>
         </div>
@@ -117,7 +117,7 @@ export function ImpactCalculator({
           <div className="bg-white border border-[#D8E2DF] rounded-xl p-6 space-y-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-[#175946]" />
+                <SlidersHorizontal className="w-4 h-4 text-[#175946]" aria-hidden="true" />
                 <h3 className="text-base font-semibold text-[#13221F]">
                   Household Baseline Conditions
                 </h3>
@@ -142,6 +142,7 @@ export function ImpactCalculator({
                   max={220}
                   step={2}
                   value={baseline.outdoorPm25UgM3}
+                  aria-valuetext={`${baseline.outdoorPm25UgM3} micrograms per cubic meter`}
                   onChange={(e) =>
                     onChangeBaseline({ ...baseline, outdoorPm25UgM3: Number(e.target.value) })
                   }
@@ -170,6 +171,7 @@ export function ImpactCalculator({
                   max={80}
                   step={2}
                   value={baseline.dailyCarKm}
+                  aria-valuetext={`${baseline.dailyCarKm} kilometers per day`}
                   onChange={(e) =>
                     onChangeBaseline({ ...baseline, dailyCarKm: Number(e.target.value) })
                   }
@@ -193,6 +195,7 @@ export function ImpactCalculator({
                   max={25}
                   step={1}
                   value={baseline.woodBurnHoursPerWeek}
+                  aria-valuetext={`${baseline.woodBurnHoursPerWeek} hours per week`}
                   onChange={(e) =>
                     onChangeBaseline({ ...baseline, woodBurnHoursPerWeek: Number(e.target.value) })
                   }
@@ -216,6 +219,7 @@ export function ImpactCalculator({
                   max={120}
                   step={5}
                   value={baseline.gasCookingMinutesPerDay}
+                  aria-valuetext={`${baseline.gasCookingMinutesPerDay} minutes per day`}
                   onChange={(e) =>
                     onChangeBaseline({
                       ...baseline,
@@ -285,7 +289,7 @@ export function ImpactCalculator({
         {/* Right Zone: Live Impact Readout & Direct Explanations */}
         <div className="lg:col-span-6 space-y-6">
           {/* Primary Exposure Comparison Card */}
-          <div className="bg-white border border-[#D8E2DF] rounded-xl p-6">
+          <div className="bg-white border border-[#D8E2DF] rounded-xl p-6" aria-live="polite">
             <div className="flex items-baseline justify-between gap-4 mb-5">
               <div>
                 <h3 className="text-base font-semibold text-[#13221F]">

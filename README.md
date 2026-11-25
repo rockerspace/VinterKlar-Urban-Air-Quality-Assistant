@@ -63,12 +63,17 @@ npm install
 npm run dev
 ```
 
-- `npm test` — Run automated Vitest unit, security-validation, and React component accessibility tests
-- `npm run lint` — TypeScript type check (`tsc --noEmit`)
+- `npm test` — Run automated Vitest unit, Express API integration, security-validation, and React accessibility tests
+- `npm run lint` — Strict TypeScript type check (`tsc --noEmit` with `strict`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`)
 - `npm run build` — Production Vite bundle
 - `npm start` — Run production Express server (`server.ts`)
 
+### Architecture & Security Hardening
+- **Modular Server (`serverApp.ts`, `serverPrompts.ts`, `serverHelpers.ts`, `server.ts`)**: Decoupled Express application factory with sliding-window per-IP rate limiting on `/api/*`, hardened HTTP security headers (`X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `X-DNS-Prefetch-Control`, `Cross-Origin-Opener-Policy`, HSTS in production), strict allowlist profile validation, control-character/newline sanitization, safe JSON syntax error responses, and internal 500 error masking.
+- **Modular Frontend (`src/hooks/`, `src/utils/`, `src/components/`)**: Custom `useVinterKlarState` (abort-safe fetches + `localStorage` persistence) and `useDialogA11y` (keyboard focus trapping, focus restoration, Escape dismissal) hooks, pure domain helpers (`calculateDirectImpact`, `calculateRoomCadr`, `isSafeHttpUrl`), and full WCAG semantics (`aria-valuetext`, `aria-live`, `role="log"`, `<fieldset>`/`<legend>`, `<caption class="sr-only">`, `scope="col"`/`scope="row"`).
+
 ### Test Coverage
-- **Physics & Emission Engine (`src/tests/cleanAirData.test.ts`)**: Verifies indoor PM2.5 infiltration math, filtration reductions, cold-start/woodsmoke/cooking emission factors, community multiplier scaling, and zero-value edge cases.
-- **Server Security & Validation (`serverHelpers.test.ts`)**: Verifies input bounds, coordinate validation, chat history sanitization, markdown JSON extraction, Gemini error mapping, and `http:`/`https:` URL safety filtering.
-- **Interactive UI & Accessibility (`src/components/__tests__/components.test.tsx`)**: Verifies interactive sliders, native accessible checkboxes, category filtering, summary export generation, and Escape-key modal handling.
+- **Physics & Emission Engine (`src/tests/cleanAirData.test.ts`)**: Verifies indoor PM2.5 infiltration math, filtration reductions, household-wide inhaled dose scaling, cold-start/woodsmoke/cooking emission factors, community multiplier scaling, and zero-value edge cases.
+- **Shared Utilities (`src/tests/utils.test.ts`)**: Verifies URL protocol safety filtering and room CADR / Corsi-Rosenthal sizing math.
+- **Server Security & Express Integration (`serverHelpers.test.ts`, `serverApp.test.ts`)**: Verifies allowlist profile sanitization, control-character stripping, coordinate bounds, chat capping, sliding-window rate limiting (`429`), malformed JSON (`400`), HTTP security headers, and SSE streaming across all 4 `/api/*` endpoints.
+- **UI Components & SPA Integration (`src/tests/components.test.tsx`, `src/tests/App.test.tsx`)**: Verifies every interactive module (`ImpactCalculator`, `PlaybookSection`, `IndoorLabSection`, `EmissionChart`, `CommunitySection`, `ProfileModal`, `AdvisorDrawer` SSE streaming, `ResilientImage`, `ErrorBoundary`) and full `App` localStorage + API flows.

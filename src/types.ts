@@ -100,6 +100,8 @@ export interface ImpactCalculationResult {
   indoorDropPct: number;
   baselineDailyInhaledUg: number;
   mitigatedDailyInhaledUg: number;
+  familyDailyInhaledUg: number;
+  familyDailyAvoidedUg: number;
   inhaledDoseDropPct: number;
   cigaretteEquivBefore: number;
   cigaretteEquivAfter: number;

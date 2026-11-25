@@ -23,7 +23,7 @@ export function ResilientImage({
         role="img"
         aria-label={alt}
       >
-        <Wind className="w-8 h-8 text-[#175946] mb-2" strokeWidth={1.75} />
+        <Wind className="w-8 h-8 text-[#175946] mb-2" strokeWidth={1.75} aria-hidden="true" />
         <span className="text-xs font-medium text-[#13221F]">{fallbackLabel}</span>
       </div>
     );

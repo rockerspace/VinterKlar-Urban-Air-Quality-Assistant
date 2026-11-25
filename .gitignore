@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+.aistudio/
+firebase-applet-config.json
+public/assets/aistudio/

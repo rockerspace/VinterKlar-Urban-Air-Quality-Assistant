@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ResilientImage } from './ResilientImage';
+import { calculateRoomCadr } from '../utils/cadr';
 
 const ROOM_PRESETS = [
   { label: 'Bedroom (16 m²)', areaM2: 16 },
@@ -42,12 +43,10 @@ export function IndoorLabSection() {
   const [roomAreaM2, setRoomAreaM2] = useState<number>(35);
   const [ceilingM, setCeilingM] = useState<number>(2.6);
 
-  // Target 4.8 air changes per hour (ACH) for severe winter smog protection
-  const targetAch = 4.8;
-  const roomVolumeM3 = roomAreaM2 * ceilingM;
-  const requiredCadrM3h = Math.round(roomVolumeM3 * targetAch);
-  const requiredCadrCfm = Math.round(requiredCadrM3h / 1.699);
-  const cubesNeeded = Math.max(1, Math.ceil(requiredCadrCfm / 450));
+  const { areaSqFt, requiredCadrM3h, requiredCadrCfm, cubesNeeded } = calculateRoomCadr(
+    roomAreaM2,
+    ceilingM,
+  );
 
   return (
     <section
@@ -96,11 +95,12 @@ export function IndoorLabSection() {
             </div>
 
             <div className="space-y-4 pt-2 border-t border-[#D8E2DF]">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Room size presets">
                 {ROOM_PRESETS.map((preset) => (
                   <button
                     key={preset.label}
                     type="button"
+                    aria-pressed={roomAreaM2 === preset.areaM2}
                     onClick={() => setRoomAreaM2(preset.areaM2)}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors cursor-pointer whitespace-nowrap ${
                       roomAreaM2 === preset.areaM2
@@ -120,7 +120,7 @@ export function IndoorLabSection() {
                       Floor Area
                     </label>
                     <span className="font-mono tabular-nums font-semibold text-[#13221F]">
-                      {roomAreaM2} m² ({Math.round(roomAreaM2 * 10.764)} sq ft)
+                      {roomAreaM2} m² ({areaSqFt} sq ft)
                     </span>
                   </div>
                   <input
@@ -130,6 +130,7 @@ export function IndoorLabSection() {
                     max={90}
                     step={1}
                     value={roomAreaM2}
+                    aria-valuetext={`${roomAreaM2} square meters (${areaSqFt} square feet)`}
                     onChange={(e) => setRoomAreaM2(Number(e.target.value))}
                     className="w-full nordic-slider"
                   />
@@ -151,13 +152,17 @@ export function IndoorLabSection() {
                     max={3.8}
                     step={0.1}
                     value={ceilingM}
+                    aria-valuetext={`${ceilingM.toFixed(1)} meters`}
                     onChange={(e) => setCeilingM(Number(e.target.value))}
                     className="w-full nordic-slider"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 bg-[#F7F9F8] border border-[#D8E2DF] rounded-lg p-3.5">
+              <div
+                aria-live="polite"
+                className="grid grid-cols-3 gap-3 bg-[#F7F9F8] border border-[#D8E2DF] rounded-lg p-3.5"
+              >
                 <div>
                   <span className="block text-[11px] text-[#4A5C58]">Target CADR</span>
                   <span className="font-mono tabular-nums text-base font-bold text-[#13221F]">
@@ -243,19 +248,35 @@ export function IndoorLabSection() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
+            <caption className="sr-only">
+              Comparison of conventional winter habits versus clean-air alternatives, direct
+              exposure/emission impacts, and estimated winter savings.
+            </caption>
             <thead>
               <tr className="bg-[#F7F9F8] border-b border-[#D8E2DF] text-xs font-semibold text-[#4A5C58]">
-                <th className="py-3 px-6">Daily Activity</th>
-                <th className="py-3 px-4">Conventional Habit</th>
-                <th className="py-3 px-4">Clean-Air Alternative</th>
-                <th className="py-3 px-4">Direct Impact</th>
-                <th className="py-3 px-6 text-right">Cost / Savings</th>
+                <th scope="col" className="py-3 px-6">
+                  Daily Activity
+                </th>
+                <th scope="col" className="py-3 px-4">
+                  Conventional Habit
+                </th>
+                <th scope="col" className="py-3 px-4">
+                  Clean-Air Alternative
+                </th>
+                <th scope="col" className="py-3 px-4">
+                  Direct Impact
+                </th>
+                <th scope="col" className="py-3 px-6 text-right">
+                  Cost / Savings
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#D8E2DF] text-xs">
               {SUSTAINABLE_SWAPS.map((row) => (
                 <tr key={row.habit} className="hover:bg-[#F7F9F8] transition-colors">
-                  <td className="py-3.5 px-6 font-semibold text-[#13221F]">{row.habit}</td>
+                  <th scope="row" className="py-3.5 px-6 font-semibold text-[#13221F] text-left">
+                    {row.habit}
+                  </th>
                   <td className="py-3.5 px-4 text-[#4A5C58]">{row.conventional}</td>
                   <td className="py-3.5 px-4 font-medium text-[#175946]">{row.alternative}</td>
                   <td className="py-3.5 px-4 text-[#13221F]">{row.directImpact}</td>

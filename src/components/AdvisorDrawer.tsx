@@ -6,6 +6,7 @@ import type {
   ImpactCalculationResult,
   LocalAirBrief,
 } from '../types';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 
 interface AdvisorDrawerProps {
   isOpen: boolean;
@@ -15,6 +16,15 @@ interface AdvisorDrawerProps {
   impact: ImpactCalculationResult;
 }
 
+function buildWelcomeMessage(profile: HouseholdProfile, airBrief: LocalAirBrief): AdvisorMessage {
+  return {
+    id: 'welcome',
+    role: 'assistant',
+    content: `Hello! I'm tracking winter air conditions in ${profile.city} (currently ~${airBrief.pm25UgM3} µg/m³ PM2.5, ${airBrief.severityLevel}). Ask me about school commute timing, low-cost window sealing, purifier sizing, or the direct impact of any household swap.`,
+    timestamp: 'Ready',
+  };
+}
+
 export function AdvisorDrawer({
   isOpen,
   onClose,
@@ -22,31 +32,32 @@ export function AdvisorDrawer({
   airBrief,
   impact,
 }: AdvisorDrawerProps) {
-  const [messages, setMessages] = useState<AdvisorMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: `Hello! I'm tracking winter air conditions in ${profile.city} (currently ~${airBrief.pm25UgM3} µg/m³ PM2.5, ${airBrief.severityLevel}). Ask me about school commute timing, low-cost window sealing, purifier sizing, or the direct impact of any household swap.`,
-      timestamp: 'Ready',
-    },
+  const [messages, setMessages] = useState<AdvisorMessage[]>(() => [
+    buildWelcomeMessage(profile, airBrief),
   ]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const dialogRef = useDialogA11y(isOpen, onClose);
+
+  // Keep welcome message synchronized with active city & air brief updates
+  useEffect(() => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === 'welcome' ? buildWelcomeMessage(profile, airBrief) : m)),
+    );
+  }, [profile, airBrief]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+    return () => {
+      abortRef.current?.abort();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -60,6 +71,10 @@ export function AdvisorDrawer({
   const sendMessage = async (textToSend: string) => {
     const trimmed = textToSend.trim();
     if (!trimmed || isStreaming) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setError(null);
     const userMsg: AdvisorMessage = {
@@ -86,6 +101,7 @@ export function AdvisorDrawer({
       const response = await fetch('/api/advisor/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           messages: nextHistory.map((m) => ({ role: m.role, content: m.content })),
           profile,
@@ -100,7 +116,7 @@ export function AdvisorDrawer({
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
+        const errData = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(errData.error || 'Advisor request failed.');
       }
 
@@ -126,7 +142,7 @@ export function AdvisorDrawer({
           const payload = clean.slice(6);
           if (payload === '[DONE]') break;
           try {
-            const parsed = JSON.parse(payload);
+            const parsed = JSON.parse(payload) as { error?: string; text?: string };
             if (parsed.error) {
               throw new Error(parsed.error);
             }
@@ -145,11 +161,16 @@ export function AdvisorDrawer({
         }
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Could not reach the clean-air advisor.';
       setError(msg);
       setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0));
     } finally {
-      setIsStreaming(false);
+      if (abortRef.current === controller) {
+        setIsStreaming(false);
+      }
     }
   };
 
@@ -159,14 +180,24 @@ export function AdvisorDrawer({
       role="dialog"
       aria-modal="true"
       aria-labelledby="advisor-drawer-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div className="bg-white border-l border-[#D8E2DF] w-full max-w-lg h-full flex flex-col shadow-xl">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="bg-white border-l border-[#D8E2DF] w-full max-w-lg h-full flex flex-col shadow-xl"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#D8E2DF] flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5 min-w-0">
-            <MessageSquare className="w-4 h-4 text-[#175946] shrink-0" />
+            <MessageSquare className="w-4 h-4 text-[#175946] shrink-0" aria-hidden="true" />
             <div className="min-w-0">
-              <h2 id="advisor-drawer-title" className="text-base font-semibold text-[#13221F] truncate">
+              <h2
+                id="advisor-drawer-title"
+                className="text-base font-semibold text-[#13221F] truncate"
+              >
                 Clean-Air Family Advisor
               </h2>
               <p className="text-xs text-[#4A5C58] truncate">
@@ -180,12 +211,18 @@ export function AdvisorDrawer({
             className="p-2 rounded-lg text-[#4A5C58] hover:text-[#13221F] hover:bg-[#EDF2F0] transition-colors cursor-pointer"
             aria-label="Close advisor"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#F7F9F8]">
+        <div
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-label="Advisor conversation"
+          className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#F7F9F8]"
+        >
           {messages.map((msg) => (
             <div
               key={msg.id}
@@ -244,7 +281,11 @@ export function AdvisorDrawer({
           }}
           className="p-4 bg-white border-t border-[#D8E2DF] flex items-center gap-2.5"
         >
+          <label htmlFor="advisor-chat-input" className="sr-only">
+            Ask the clean-air advisor a question
+          </label>
           <input
+            id="advisor-chat-input"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -258,9 +299,9 @@ export function AdvisorDrawer({
             aria-label="Send message"
           >
             {isStreaming ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4" aria-hidden="true" />
             )}
           </button>
         </form>

@@ -139,6 +139,18 @@ describe('calculateDirectImpact physics engine', () => {
     expect(result.mitigatedIndoorPm25).toBe(0);
     expect(result.indoorDropPct).toBe(0);
     expect(result.inhaledDoseDropPct).toBe(0);
+    expect(result.familyDailyInhaledUg).toBe(0);
+    expect(result.familyDailyAvoidedUg).toBe(0);
     expect(Number.isNaN(result.weeklyPm25AvoidedGrams)).toBe(false);
+  });
+
+  it('scales total household daily inhaled and avoided dose proportionally with householdSize', () => {
+    const singlePerson = calculateDirectImpact(SAMPLE_BASELINE, ['corsi_rosenthal'], 1, 1);
+    const familyOfFour = calculateDirectImpact(SAMPLE_BASELINE, ['corsi_rosenthal'], 4, 1);
+
+    expect(familyOfFour.familyDailyInhaledUg).toBe(singlePerson.mitigatedDailyInhaledUg * 4);
+    expect(familyOfFour.familyDailyAvoidedUg).toBe(
+      (singlePerson.baselineDailyInhaledUg - singlePerson.mitigatedDailyInhaledUg) * 4,
+    );
   });
 });

@@ -119,7 +119,11 @@ export function CommunitySection({
             aria-live="polite"
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#175946] hover:bg-[#124738] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
-            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? (
+              <Check className="w-3.5 h-3.5" aria-hidden="true" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+            )}
             {copied ? 'Copied Action Summary' : 'Copy Community Pledge'}
           </button>
           <button
@@ -127,7 +131,7 @@ export function CommunitySection({
             onClick={handleDownloadSummary}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-[#13221F] bg-white border border-[#D8E2DF] hover:bg-[#EDF2F0] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
-            <Download className="w-3.5 h-3.5 text-[#175946]" />
+            <Download className="w-3.5 h-3.5 text-[#175946]" aria-hidden="true" />
             Download Summary (.txt)
           </button>
           <button
@@ -135,7 +139,7 @@ export function CommunitySection({
             onClick={() => window.print()}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-[#13221F] bg-white border border-[#D8E2DF] hover:bg-[#EDF2F0] rounded-lg transition-colors cursor-pointer whitespace-nowrap"
           >
-            <Printer className="w-3.5 h-3.5 text-[#4A5C58]" />
+            <Printer className="w-3.5 h-3.5 text-[#4A5C58]" aria-hidden="true" />
             Print / Save PDF
           </button>
         </div>
@@ -183,7 +187,7 @@ export function CommunitySection({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
+        <div aria-live="polite" className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
           <div>
             <span className="block text-xs text-[#4A5C58]">
               Fine PM2.5 Kept Out of Local Airshed
